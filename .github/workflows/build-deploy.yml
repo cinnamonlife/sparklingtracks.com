@@ -39,31 +39,35 @@ jobs:
           cache: npm
           cache-dependency-path: private-repo-temp/package-lock.json
 
-      - name: Inject Vite Configuration with Path Aliases
+      - name: Inject Vite Configuration with Base Path
         working-directory: private-repo-temp
         run: |
-          cat <<EOT >> vite.config.ts
-          import { defineConfig } from 'vite';
-          import react from '@vitejs/plugin-react-swc';
-          import path from 'path';
-          import { componentTagger } from 'lovable-tagger';
-
-          export default defineConfig(({ mode }) => ({
-            server: {
-              host: "::",
-              port: 8080,
-            },
-            plugins: [
-              react(),
-              mode === 'development' && componentTagger(),
-            ].filter(Boolean),
-            resolve: {
-              alias: {
-                "@": path.resolve(__dirname, "./src"),
-              },
-            },
-          }));
-          EOT
+          # Backup the original Vite configuration
+          cp vite.config.ts vite.config.ts.bak
+          
+          # Inject the base path dynamically
+          echo "import { defineConfig } from 'vite';" > vite.config.ts
+          echo "import react from '@vitejs/plugin-react-swc';" >> vite.config.ts
+          echo "import path from 'path';" >> vite.config.ts
+          echo "import { componentTagger } from 'lovable-tagger';" >> vite.config.ts
+          echo "" >> vite.config.ts
+          echo "export default defineConfig(({ mode }) => ({" >> vite.config.ts
+          echo "  base: '/sparklingtracks.com/'," >> vite.config.ts
+          echo "  server: {" >> vite.config.ts
+          echo "    host: '::'," >> vite.config.ts
+          echo "    port: 8080," >> vite.config.ts
+          echo "  }," >> vite.config.ts
+          echo "  plugins: [" >> vite.config.ts
+          echo "    react()," >> vite.config.ts
+          echo "    mode === 'development' && componentTagger()," >> vite.config.ts
+          echo "  ].filter(Boolean)," >> vite.config.ts
+          echo "  resolve: {" >> vite.config.ts
+          echo "    alias: {" >> vite.config.ts
+          echo "      '@': path.resolve(__dirname, './src')," >> vite.config.ts
+          echo "    }," >> vite.config.ts
+          echo "  }," >> vite.config.ts
+          echo "}));" >> vite.config.ts
+          
           cat vite.config.ts
 
       - name: Install dependencies
@@ -73,6 +77,10 @@ jobs:
       - name: Build project
         working-directory: private-repo-temp
         run: npm run build
+
+      - name: Restore Original Vite Configuration
+        working-directory: private-repo-temp
+        run: mv vite.config.ts.bak vite.config.ts
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
