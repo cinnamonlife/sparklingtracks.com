@@ -70,8 +70,8 @@ jobs:
           const content = fs.readFileSync(configFile, 'utf8');
           console.log('Original content:', content);
           
-          // Create the new content with base path
-          const basePathValue = '/sparklingtracks.com/';
+          // Create the new content with base path - for GitHub Pages, use '/' for root path
+          const basePathValue = '/';
           
           // Simplified approach: detect the arrow function pattern and insert our base property
           let newContent;
