@@ -61,7 +61,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: private-repo-temp/package-lock.json
 
-      # Update the Vite configuration for GitHub Pages using sed
+      # Simpler approach: Create a new Vite config file with node script
       - name: Update Vite configuration
         working-directory: private-repo-temp
         run: |
@@ -79,23 +79,26 @@ jobs:
           echo "Original Vite config:"
           cat "$VITE_CONFIG"
           
-          # Create a backup
-          cp "$VITE_CONFIG" "${VITE_CONFIG}.bak"
-          
-          # Use sed to add the base property
-          if grep -q "base:" "$VITE_CONFIG"; then
-            # If base property already exists, update it
-            sed -i 's/base:.*,/base: ".\/",/' "$VITE_CONFIG"
-          else
-            # Add base property after the opening parenthesis of the configuration object
-            sed -i 's/({/({ base: ".\\/",/' "$VITE_CONFIG"
-          fi
-          
-          # Add build optimizations if they don't exist
-          if ! grep -q "build:" "$VITE_CONFIG"; then
-            # Add build property before the closing parenthesis
-            sed -i 's/});$/  build: {\n    minify: true,\n    sourcemap: false,\n    cssMinify: true\n  }\n});/' "$VITE_CONFIG"
-          fi
+          # Create a new file with updated config
+          node -e "
+            const fs = require('fs');
+            const content = fs.readFileSync('$VITE_CONFIG', 'utf8');
+            
+            // Add base property
+            let updatedContent = content.replace(
+              'export default defineConfig(({ mode }) => ({', 
+              'export default defineConfig(({ mode }) => ({ base: \\'./\\', '
+            );
+            
+            // Add build options
+            updatedContent = updatedContent.replace(
+              '}));', 
+              '  build: { minify: true, sourcemap: false, cssMinify: true }\\n}));'
+            );
+            
+            fs.writeFileSync('$VITE_CONFIG', updatedContent);
+            console.log('Vite config updated successfully!');
+          "
           
           echo "Updated Vite config:"
           cat "$VITE_CONFIG"
