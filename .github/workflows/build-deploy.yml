@@ -10,6 +10,12 @@ on:
   push:
     branches: [ main ]
 
+# Define environment variables for easy updates
+env:
+  PUBLIC_REPO_NAME: "cinnamonlife/sparklingtracks.com"
+  SITE_PATH_PREFIX: "/sparklingtracks.com"
+  SITE_TITLE: "Sparkling Tracks"
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -46,31 +52,110 @@ jobs:
           cache: 'npm'
           cache-dependency-path: private-repo-temp/package-lock.json
           
-      # Build project with verbose output
+      # Build project with enhanced diagnostics
       - name: Build project
         working-directory: private-repo-temp
         run: |
+          echo "Environment info:"
+          node -v
+          npm -v
+          
+          echo "Repository contents:"
+          ls -la
+          
+          echo "Checking package.json:"
+          cat package.json
+          
           echo "Checking package.json build script:"
           grep -A 3 "scripts" package.json
           
-          echo "Installing dependencies:"
-          npm ci
+          echo "Installing dependencies with verbose logging:"
+          npm ci --verbose
           
-          echo "Running build command:"
-          npm run build
+          echo "Running build command with increased memory limit:"
+          NODE_OPTIONS=--max_old_space_size=4096 npm run build
           
           echo "Checking build output:"
           ls -la
           if [ -d "dist" ]; then
             echo "dist directory found! Contents:"
             ls -la dist
+            
+            if [ -f "dist/index.html" ]; then
+              echo "index.html found in dist directory!"
+              echo "First 100 lines of index.html:"
+              head -n 100 dist/index.html
+            else
+              echo "WARNING: index.html not found in dist directory!"
+            fi
           else
             echo "dist directory not found. Checking for other build directories:"
             find . -maxdepth 2 -type d -name "build" -o -name "dist" -o -name "out" -o -name "public"
+            
+            # Try to locate any HTML files
+            echo "Searching for HTML files in the repository:"
+            find . -name "*.html" | head -n 10
           fi
           
-      # Post-build: Fix asset paths for GitHub Pages
-      - name: Fix asset paths for GitHub Pages
+      # Fallback: Create a basic site if build fails
+      - name: Create fallback site if build fails
+        run: |
+          if [ ! -d "private-repo-temp/dist" ] && [ ! -d "private-repo-temp/build" ] && [ ! -d "private-repo-temp/out" ] && [ ! -d "private-repo-temp/public" ]; then
+            echo "Build appears to have failed. Creating a fallback site..."
+            mkdir -p private-repo-temp/dist
+            
+            cat > private-repo-temp/dist/index.html << EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${{ env.SITE_TITLE }}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #2a5934;
+        }
+        .message {
+            background-color: #f8f9fa;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .button {
+            display: inline-block;
+            background-color: #28a745;
+            color: white;
+            padding: 10px 15px;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>${{ env.SITE_TITLE }}</h1>
+    <div class="message">
+        <p>This is a temporary placeholder page. The full site is being built.</p>
+        <p>Please check back soon for the complete website.</p>
+    </div>
+    <p>If you're the site administrator, please check the GitHub Actions logs for build errors.</p>
+    <a href="https://github.com/${{ env.PUBLIC_REPO_NAME }}/actions" class="button">View Build Logs</a>
+</body>
+</html>
+EOF
+            
+            echo "Created fallback site!"
+          else
+            echo "Build output exists, no need for fallback."
+          fi
         working-directory: private-repo-temp
         run: |
           echo "Fixing asset paths in HTML files..."
@@ -102,9 +187,25 @@ jobs:
           
       # Add a test file to verify deployment is working
       - name: Add test file
-        working-directory: private-repo-temp/dist
         run: |
-          echo '<html><head><title>Test Page</title></head><body><h1>GitHub Pages Deployment Test</h1><p>If you can see this, the deployment is working!</p></body></html>' > test.html
+          # Find the build directory
+          BUILD_DIR=""
+          for dir in dist build out public; do
+            if [ -d "private-repo-temp/$dir" ]; then
+              BUILD_DIR="private-repo-temp/$dir"
+              echo "Found build directory: $BUILD_DIR"
+              break
+            fi
+          done
+          
+          if [ -z "$BUILD_DIR" ]; then
+            echo "No build directory found. Using fallback directory."
+            BUILD_DIR="private-repo-temp/dist"
+            mkdir -p "$BUILD_DIR"
+          fi
+          
+          echo '<html><head><title>Test Page</title></head><body><h1>GitHub Pages Deployment Test</h1><p>If you can see this, the deployment is working!</p></body></html>' > "$BUILD_DIR/test.html"
+          echo "Test file created at $BUILD_DIR/test.html"
           
       # Debug: Check Git version and ensure Git is installed
       - name: Debug Git
@@ -121,9 +222,25 @@ jobs:
           
       # Deploy built files to GitHub Pages
       - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          folder: private-repo-temp/dist  # Adjust if your build output is in a different directory
-          token: ${{ secrets.DEPLOYMENT_TOKEN }}  # Use a personal access token instead
-          branch: gh-pages  # Deploys to gh-pages branch
-          clean: true       # Removes any files in the branch not in the build output
+        run: |
+          # Find the build directory
+          BUILD_DIR=""
+          for dir in dist build out public; do
+            if [ -d "private-repo-temp/$dir" ]; then
+              BUILD_DIR="private-repo-temp/$dir"
+              echo "Found build directory for deployment: $BUILD_DIR"
+              break
+            fi
+          done
+          
+          if [ -z "$BUILD_DIR" ]; then
+            echo "No build directory found. Using fallback directory."
+            BUILD_DIR="private-repo-temp/dist"
+          fi
+          
+          # Deploy using JamesIves/github-pages-deploy-action
+          npx github-pages-deploy-action@v4 \
+            -f $BUILD_DIR \
+            -t ${{ secrets.DEPLOYMENT_TOKEN }} \
+            -b gh-pages \
+            --clean true
