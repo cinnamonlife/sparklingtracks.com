@@ -81,26 +81,10 @@ jobs:
           echo "Creating deployment structure..."
           mkdir -p artifacts/sparklingtracks.com
           cp -r private-repo-temp/dist/* artifacts/sparklingtracks.com/
-          
-          # Fix asset paths in index.html
-          echo "Fixing asset paths in index.html..."
-          cd artifacts/sparklingtracks.com
-          
-          # More comprehensive path fixing
-          sed -i 's|src="/|src="/sparklingtracks.com/|g' index.html
-          sed -i 's|href="/|href="/sparklingtracks.com/|g' index.html
-          sed -i 's|content="/|content="/sparklingtracks.com/|g' index.html
-          
-          # Verify the changes
-          echo "Verifying path fixes..."
-          echo "Checking for remaining absolute paths:"
-          grep -n 'src="/' index.html || echo "No absolute src paths found"
-          grep -n 'href="/' index.html || echo "No absolute href paths found"
-          
-          echo "Final index.html content:"
-          cat index.html
-          
-          cd ../..
+          echo "Deployment structure:"
+          ls -la artifacts/sparklingtracks.com/
+          echo "\nIndex.html content:"
+          cat artifacts/sparklingtracks.com/index.html
 
       - name: Archive deployment folder
         id: archive
