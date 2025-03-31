@@ -61,6 +61,62 @@ jobs:
           cache: 'npm'
           cache-dependency-path: private-repo-temp/package-lock.json
 
+      # Update the Vite configuration for GitHub Pages
+      - name: Update Vite configuration
+        working-directory: private-repo-temp
+        run: |
+          # Find the Vite config file
+          VITE_CONFIG=""
+          if [ -f "vite.config.ts" ]; then
+            VITE_CONFIG="vite.config.ts"
+          elif [ -f "vite.config.js" ]; then
+            VITE_CONFIG="vite.config.js"
+          else
+            echo "Could not find Vite config file"
+            exit 1
+          fi
+          
+          echo "Original Vite config:"
+          cat "$VITE_CONFIG"
+          
+          # Create a modified version of the config with proper base path
+          cat > "vite.config.modified.ts" << EOF
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react-swc";
+import path from "path";
+import { componentTagger } from "lovable-tagger";
+
+// https://vitejs.dev/config/
+export default defineConfig(({ mode }) => ({
+  base: './',  // Use relative paths
+  server: {
+    host: "::",
+    port: 8080,
+  },
+  plugins: [
+    react(),
+    mode === 'development' &&
+    componentTagger(),
+  ].filter(Boolean),
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  build: {
+    minify: true,
+    sourcemap: false,
+    cssMinify: true
+  }
+}));
+EOF
+          
+          # Replace the original file
+          mv "vite.config.modified.ts" "$VITE_CONFIG"
+          
+          echo "Updated Vite config:"
+          cat "$VITE_CONFIG"
+
       - name: Install dependencies
         working-directory: private-repo-temp
         run: |
@@ -76,22 +132,27 @@ jobs:
           npm run build
           echo "Build complete. Exit code: $?"
 
+      - name: Add .nojekyll file
+        run: |
+          touch private-repo-temp/dist/.nojekyll
+          echo "Created .nojekyll file"
+
       - name: Prepare deployment structure
         run: |
           echo "Creating deployment structure..."
-          mkdir -p artifacts/sparklingtracks.com
-          cp -r private-repo-temp/dist/* artifacts/sparklingtracks.com/
+          mkdir -p artifacts
+          cp -r private-repo-temp/dist/* artifacts/
           echo "Deployment structure:"
-          ls -la artifacts/sparklingtracks.com/
+          ls -la artifacts/
           echo "\nIndex.html content:"
-          cat artifacts/sparklingtracks.com/index.html
+          cat artifacts/index.html
 
       - name: Archive deployment folder
         id: archive
         run: |
           echo "Archiving deployment folder..."
           cd artifacts
-          tar -czf github-pages.tar.gz sparklingtracks.com
+          tar -czf github-pages.tar.gz .
           echo "artifact=artifacts/github-pages.tar.gz" >> $GITHUB_OUTPUT
           echo "Archive contents:"
           tar -tvf github-pages.tar.gz | head -n 10
@@ -138,16 +199,14 @@ jobs:
           echo "Extracting archive..."
           tar -xzf github-pages.tar.gz -C dist
           echo "Extracted contents:"
-          ls -la dist/sparklingtracks.com/
+          ls -la dist/
 
       - name: Debug deployed content
         run: |
           echo "Deployed folder structure:"
           ls -la dist/
-          echo "\nSparklingtracks.com folder contents:"
-          ls -la dist/sparklingtracks.com/
           echo "\nDeployed index.html content:"
-          cat dist/sparklingtracks.com/index.html
+          cat dist/index.html
 
       - name: Configure Git
         run: |
@@ -157,13 +216,10 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: dist/sparklingtracks.com # Ensure this matches your output directory
+          folder: dist
           token: ${{ secrets.DEPLOYMENT_TOKEN }}
           branch: gh-pages
-          clean: false
-          clean-exclude: |
-            .nojekyll
-            CNAME
+          clean: true
 
       - name: Verify deployment
         run: |
@@ -172,7 +228,5 @@ jobs:
           git checkout gh-pages
           echo "Deployed files:"
           ls -la
-          echo "\nSparklingtracks.com folder contents:"
-          ls -la sparklingtracks.com/
           echo "\nDeployed index.html:"
-          cat sparklingtracks.com/index.html
+          cat index.html
