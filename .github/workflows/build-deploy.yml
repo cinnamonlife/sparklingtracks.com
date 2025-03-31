@@ -1,0 +1,60 @@
+name: Build and Deploy to GitHub Pages
+
+on:
+  schedule:
+    # Runs every hour (adjust as needed)
+    - cron: '0 * * * *'
+  # Allow manual trigger
+  workflow_dispatch:
+  # Run on pushes to the main branch of the public repo
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # Check out the public repository
+      - name: Checkout public repository
+        uses: actions/checkout@v3
+        
+      # Set up SSH for deploy key access to private repo
+      - name: Set up SSH deploy key
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.PRIVATE_REPO_DEPLOY_KEY }}
+          
+      # Add GitHub to known hosts
+      - name: Add GitHub to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          
+      # Clone private repository to a temporary directory
+      - name: Clone private repository
+        run: |
+          git clone git@github.com:${{ secrets.PRIVATE_REPO_NAME }}.git private-repo-temp
+          
+      # Set up Node.js environment
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: private-repo-temp/package-lock.json
+          
+      # Install dependencies and build the project
+      - name: Build project
+        working-directory: private-repo-temp
+        run: |
+          npm ci
+          npm run build
+          
+      # Deploy built files to GitHub Pages
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: private-repo-temp/dist  # Adjust if your build output is in a different directory
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages  # Deploys to gh-pages branch
+          clean: true       # Removes any files in the branch not in the build output
