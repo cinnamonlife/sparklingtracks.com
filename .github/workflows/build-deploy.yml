@@ -1,14 +1,9 @@
 name: Build and Deploy
 
 on:
-  # Runs every hour
   schedule:
-    - cron: "0 * * * *"
-  
-  # Allow manual trigger via UI
-  workflow_dispatch:
-  
-  # Run on pushes to the 'main' branch
+    - cron: "0 * * * *" # Runs every hour
+  workflow_dispatch:     # Manual trigger
   push:
     branches:
       - main
@@ -20,104 +15,65 @@ jobs:
       contents: write
 
     steps:
-      # Check out public repository
+      # Checkout public repository
       - name: Checkout public repository
         uses: actions/checkout@v3
-        
-      # Set up SSH for deploy key
+
+      # Set up SSH for private repo access
       - name: Set up SSH deploy key
         uses: webfactory/ssh-agent@v0.7.0
         with:
           ssh-private-key: ${{ secrets.PRIVATE_REPO_DEPLOY_KEY }}
-          
+
       # Add GitHub to known hosts
       - name: Add GitHub to known hosts
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan github.com >> ~/.ssh/known_hosts
-          
-      # Clone private repository to a temporary directory
+
+      # Clone private repository
       - name: Clone private repository
         run: |
           git clone git@github.com:${{ secrets.PRIVATE_REPO_NAME }}.git private-repo-temp
-          
-      # Debug: Check the repository structure
-      - name: Debug repository structure
+
+      # Debug: Verify structure
+      - name: Verify repository structure
         run: |
-          echo "Public repository:"
+          echo "Public Repo Structure:"
           ls -la
-          echo "Private repository:"
+          echo "Private Repo Structure:"
           ls -la private-repo-temp
-          
-      # Set up Node.js environment
+
+      # Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: "18"
           cache: npm
           cache-dependency-path: private-repo-temp/package-lock.json
-          
-      # Build the project with enhanced diagnostics
-      - name: Build project
+
+      # Install & Build Project
+      - name: Install & Build
         working-directory: private-repo-temp
         run: |
-          echo "Environment info:"
-          node -v
-          npm -v
-          
-          echo "Installing dependencies:"
+          echo "Installing dependencies..."
           npm ci
-          
-          echo "Running build command with increased memory limit:"
+          echo "Building project..."
           NODE_OPTIONS=--max_old_space_size=4096 npm run build
-          
-          echo "Checking build output:"
-          ls -la
-          if [ -d "dist" ]; then
-            echo "dist directory found! Contents:"
-            ls -la dist
-            
-            if [ -f "dist/index.html" ]; then
-              echo "index.html found in dist directory!"
-            else
-              echo "WARNING: index.html not found in dist directory!"
-            fi
-          else
-            echo "dist directory not found. Checking for other build directories:"
-            find . -maxdepth 2 -type d -name "build" -o -name "dist" -o -name "out" -o -name "public"
-          
-      # Create .nojekyll file to disable Jekyll processing
-      - name: Create .nojekyll file
+          echo "Build output:"
+          ls -la dist || echo "⚠️ dist folder not found!"
+
+      # Optional: Add .nojekyll file (safe)
+      - name: Disable Jekyll
         run: |
           touch private-repo-temp/dist/.nojekyll
-          
-      # Create a fallback 404.html file for SPA routing
-      - name: Create 404.html for SPA routing
-        run: |
-          cat > private-repo-temp/dist/404.html << 'EOF'
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Page Not Found</title>
-  <script>
-    // Single Page App routing - redirect to index.html
-    sessionStorage.setItem('redirectPath', window.location.pathname);
-    window.location.replace('/');
-  </script>
-</head>
-<body>
-  <p>Redirecting...</p>
-</body>
-</html>
-EOF
 
-      # Configure Git
+      # Git configuration
       - name: Configure Git
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "github-actions@github.com"
-          
+
       # Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
