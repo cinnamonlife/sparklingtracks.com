@@ -1,178 +1,44 @@
-name: Build and Deploy
+name: Deploy to GitHub Pages
 
 on:
-  schedule:
-    - cron: "0 * * * *" # Runs every hour
-  workflow_dispatch:     # Manual trigger
   push:
     branches:
       - main
+  workflow_dispatch: # Allows manual trigger
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy_to_pages.outputs.github_pages_url }}
     runs-on: ubuntu-latest
-    outputs:
-      build-status: ${{ steps.build-status.outcome }}
-
     steps:
-      - name: Checkout public repository
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Debug environment
-        run: |
-          echo "GitHub workspace: $GITHUB_WORKSPACE"
-          echo "Current directory: $(pwd)"
-          echo "Directory contents:"
-          ls -la
-
-      - name: Set up SSH deploy key
-        uses: webfactory/ssh-agent@v0.7.0
-        with:
-          ssh-private-key: ${{ secrets.PRIVATE_REPO_DEPLOY_KEY }}
-
-      - name: Add GitHub to known hosts
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-
-      - name: Clone private repository
-        run: |
-          git clone git@github.com:${{ secrets.PRIVATE_REPO_NAME }}.git private-repo-temp
-          echo "Private repo contents:"
-          ls -la private-repo-temp
-
-      - name: Check package.json and dependencies
-        working-directory: private-repo-temp
-        run: |
-          echo "Package.json contents:"
-          cat package.json
-          echo "\nNode version:"
-          node --version
-          echo "NPM version:"
-          npm --version
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: private-repo-temp/package-lock.json
 
       - name: Install dependencies
-        working-directory: private-repo-temp
-        run: |
-          npm ci
-          echo "Node modules installed:"
-          ls -la node_modules | head -n 10
+        run: npm ci
 
       - name: Build
-        id: build-status
-        working-directory: private-repo-temp
-        run: |
-          echo "Starting build..."
-          npm run build
-          echo "Build complete. Exit code: $?"
+        run: npm run build
 
-      - name: Prepare deployment structure
-        run: |
-          echo "Creating deployment structure..."
-          mkdir -p artifacts/sparklingtracks.com
-          cp -r private-repo-temp/dist/* artifacts/sparklingtracks.com/
-          echo "Deployment structure:"
-          ls -la artifacts/sparklingtracks.com/
-          echo "\nIndex.html content:"
-          cat artifacts/sparklingtracks.com/index.html
-
-      - name: Archive deployment folder
-        id: archive
-        run: |
-          echo "Archiving deployment folder..."
-          cd artifacts
-          tar -czf github-pages.tar.gz sparklingtracks.com
-          echo "artifact=artifacts/github-pages.tar.gz" >> $GITHUB_OUTPUT
-          echo "Archive contents:"
-          tar -tvf github-pages.tar.gz | head -n 10
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Vite GitHub Pages Deployer
+        uses: skywarth/vite-github-pages-deployer@v1.5.0
+        id: deploy_to_pages
         with:
-          name: github-pages
-          path: artifacts/github-pages.tar.gz
-
-  report-build-status:
-    runs-on: ubuntu-latest
-    needs: build
-    if: always()
-    steps:
-      - name: Report build status
-        run: |
-          if [[ "${{ needs.build.outputs.build-status }}" == "success" ]]; then
-            echo "✅ Build succeeded!"
-          else
-            echo "❌ Build failed!"
-          fi
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    if: ${{ needs.build.outputs.build-status == 'success' }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: github-pages
-
-      - name: Extract artifact
-        run: |
-          echo "Creating dist directory..."
-          mkdir -p dist
-          echo "Extracting archive..."
-          tar -xzf github-pages.tar.gz -C dist
-          echo "Extracted contents:"
-          ls -la dist/sparklingtracks.com/
-
-      - name: Debug deployed content
-        run: |
-          echo "Deployed folder structure:"
-          ls -la dist/
-          echo "\nSparklingtracks.com folder contents:"
-          ls -la dist/sparklingtracks.com/
-          echo "\nDeployed index.html content:"
-          cat dist/sparklingtracks.com/index.html
-
-      - name: Configure Git
-        run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "github-actions@github.com"
-
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          folder: dist/sparklingtracks.com # Ensure this matches your output directory
-          token: ${{ secrets.DEPLOYMENT_TOKEN }}
-          branch: gh-pages
-          clean: false
-          clean-exclude: |
-            .nojekyll
-            CNAME
-
-      - name: Verify deployment
-        run: |
-          echo "Checking gh-pages branch..."
-          git fetch origin gh-pages
-          git checkout gh-pages
-          echo "Deployed files:"
-          ls -la
-          echo "\nSparklingtracks.com folder contents:"
-          ls -la sparklingtracks.com/
-          echo "\nDeployed index.html:"
-          cat sparklingtracks.com/index.html
+          build_path: dist # Adjust if your build output is different
