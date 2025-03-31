@@ -150,11 +150,13 @@ jobs:
       - name: Extract artifact
         run: |
           echo "Creating dist directory..."
-          mkdir -p dist
+          mkdir -p dist/sparklingtracks.com
           echo "Extracting archive..."
           tar -xzf github-pages.tar.gz -C dist
+          echo "Moving files to correct location..."
+          mv dist/sparklingtracks.com/* dist/sparklingtracks.com/
           echo "Extracted contents:"
-          ls -la dist/
+          ls -la dist/sparklingtracks.com/
 
       - name: Debug deployed content
         run: |
@@ -176,8 +178,10 @@ jobs:
           folder: dist
           token: ${{ secrets.DEPLOYMENT_TOKEN }}
           branch: gh-pages
-          clean: true
-          target-folder: sparklingtracks.com
+          clean: false
+          clean-exclude: |
+            .nojekyll
+            CNAME
 
       - name: Verify deployment
         run: |
