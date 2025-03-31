@@ -91,7 +91,7 @@ jobs:
         run: |
           echo "Archiving deployment folder..."
           cd artifacts
-          tar -czf github-pages.tar.gz *
+          tar -czf github-pages.tar.gz sparklingtracks.com
           echo "artifact=artifacts/github-pages.tar.gz" >> $GITHUB_OUTPUT
           echo "Archive contents:"
           tar -tvf github-pages.tar.gz | head -n 10
@@ -134,7 +134,7 @@ jobs:
       - name: Extract artifact
         run: |
           echo "Creating dist directory..."
-          mkdir dist
+          mkdir -p dist
           echo "Extracting archive..."
           tar -xzf github-pages.tar.gz -C dist
           echo "Extracted contents:"
@@ -157,7 +157,7 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: dist
+          folder: dist/sparklingtracks.com
           token: ${{ secrets.DEPLOYMENT_TOKEN }}
           branch: gh-pages
           clean: true
