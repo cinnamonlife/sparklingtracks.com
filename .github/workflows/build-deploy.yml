@@ -134,11 +134,9 @@ jobs:
       - name: Extract artifact
         run: |
           echo "Creating dist directory..."
-          mkdir -p dist/sparklingtracks.com
+          mkdir -p dist
           echo "Extracting archive..."
           tar -xzf github-pages.tar.gz -C dist
-          echo "Moving files to correct location..."
-          mv dist/sparklingtracks.com/* dist/sparklingtracks.com/
           echo "Extracted contents:"
           ls -la dist/sparklingtracks.com/
 
