@@ -13,12 +13,15 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    # Add permissions needed for GitHub Pages
+    permissions:
+      contents: write
     steps:
-      # Check out the public repository
+      # Check out public repository
       - name: Checkout public repository
         uses: actions/checkout@v3
         
-      # Set up SSH for deploy key access to private repo
+      # Set up SSH for deploy key
       - name: Set up SSH deploy key
         uses: webfactory/ssh-agent@v0.7.0
         with:
@@ -43,18 +46,47 @@ jobs:
           cache: 'npm'
           cache-dependency-path: private-repo-temp/package-lock.json
           
-      # Install dependencies and build the project
+      # Build project with verbose output
       - name: Build project
         working-directory: private-repo-temp
         run: |
+          echo "Checking package.json build script:"
+          grep -A 3 "scripts" package.json
+          
+          echo "Installing dependencies:"
           npm ci
+          
+          echo "Running build command:"
           npm run build
+          
+          echo "Checking build output:"
+          ls -la
+          if [ -d "dist" ]; then
+            echo "dist directory found! Contents:"
+            ls -la dist
+          else
+            echo "dist directory not found. Checking for other build directories:"
+            find . -maxdepth 2 -type d -name "build" -o -name "dist" -o -name "out" -o -name "public"
+          fi
+          
+      # Debug: Check Git version and ensure Git is installed
+      - name: Debug Git
+        run: |
+          git --version
+          which git
+          echo "Git executable path: $(which git)"
+          
+      # Make sure Git is configured properly
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "github-actions@github.com"
           
       # Deploy built files to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: private-repo-temp/dist  # Adjust if your build output is in a different directory
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.DEPLOYMENT_TOKEN }}  # Use the personal access token
           branch: gh-pages  # Deploys to gh-pages branch
           clean: true       # Removes any files in the branch not in the build output
