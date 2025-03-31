@@ -173,10 +173,11 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: dist/sparklingtracks.com
+          folder: dist
           token: ${{ secrets.DEPLOYMENT_TOKEN }}
           branch: gh-pages
           clean: true
+          target-folder: sparklingtracks.com
 
       - name: Verify deployment
         run: |
