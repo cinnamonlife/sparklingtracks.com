@@ -2,19 +2,10 @@ name: Build and Deploy to GitHub Pages
 
 on:
   schedule:
-    # Runs every hour (adjust as needed)
-    - cron: '0 * * * *'
-  # Allow manual trigger
-  workflow_dispatch:
-  # Run on pushes to the main branch of the public repo
+    - cron: '0 * * * *'  # Runs every hour
+  workflow_dispatch:  # Allow manual trigger
   push:
-    branches: [ main ]
-
-# Define environment variables for easy updates
-env:
-  PUBLIC_REPO_NAME: "cinnamonlife/sparklingtracks.com"
-  SITE_PATH_PREFIX: "/sparklingtracks.com"
-  SITE_TITLE: "Sparkling Tracks"
+    branches: [ main ]  # Run on pushes to main branch
 
 jobs:
   build-and-deploy:
@@ -22,38 +13,40 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Check out public repository
       - name: Checkout public repository
         uses: actions/checkout@v3
         
-      # Set up SSH for deploy key
       - name: Set up SSH deploy key
         uses: webfactory/ssh-agent@v0.7.0
         with:
           ssh-private-key: ${{ secrets.PRIVATE_REPO_DEPLOY_KEY }}
-          
-      # Add GitHub to known hosts
+        
       - name: Add GitHub to known hosts
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan github.com >> ~/.ssh/known_hosts
-          
-      # Clone private repository to a temporary directory
+        
       - name: Clone private repository
         run: |
           git clone git@github.com:${{ secrets.PRIVATE_REPO_NAME }}.git private-repo-temp
-          
-      # Modify Vite configuration to use the correct base path
-      - name: Update Vite configuration for GitHub Pages
+        
+      - name: Create .nojekyll file
+        run: touch private-repo-temp/.nojekyll
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: private-repo-temp/package-lock.json
+        
+      - name: Build project
+        working-directory: private-repo-temp
         run: |
-          cd private-repo-temp
-          
-          # Create a simple script to modify the vite config
           cat > update-config.mjs << 'ENDSCRIPT'
           import fs from 'fs';
           import path from 'path';
-          
-          // Find the Vite config file
+
           let configFile = '';
           if (fs.existsSync('vite.config.ts')) {
             configFile = 'vite.config.ts';
@@ -66,91 +59,62 @@ jobs:
           
           console.log(`Found Vite config at: ${configFile}`);
           
-          // Read the file
-          const content = fs.readFileSync(configFile, 'utf8');
-          console.log('Original content:', content);
+          const newConfig = `
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react-swc';
+import { componentTagger } from 'lovable-tagger';
+
+export default defineConfig(({ mode }) => ({
+  base: '/',
+  server: {
+    host: '::',
+    port: 8080,
+  },
+  plugins: [
+    react(),
+    mode === 'development' && componentTagger(),
+  ].filter(Boolean),
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+  build: {
+    minify: true,
+    sourcemap: false,
+    cssMinify: true,
+  },
+}));`;
           
-          // Create the new content with base path - for GitHub Pages, use '/' for root path
-          const basePathValue = '/';
-          
-          // Simplified approach: detect the arrow function pattern and insert our base property
-          let newContent;
-          if (content.includes('defineConfig(({')) {
-            // Format: export default defineConfig(({ mode }) => ({
-            newContent = content.replace(
-              /defineConfig\(\(\{ ?(.*?) ?\}\) => \(\{/,
-              `defineConfig(({ $1 }) => ({\n  base: '${basePathValue}',`
-            );
-          } else if (content.includes('defineConfig({')) {
-            // Format: export default defineConfig({
-            newContent = content.replace(
-              /defineConfig\(\{/,
-              `defineConfig({\n  base: '${basePathValue}',`
-            );
-          } else {
-            // Unknown format, add a base property to the start of the config object
-            newContent = content.replace(
-              /export default defineConfig\((.*?)\)/s,
-              (match, p1) => {
-                // If p1 is an object literal
-                if (p1.trim().startsWith('{')) {
-                  return `export default defineConfig({\n  base: '${basePathValue}',${p1.substring(1)}`;
-                }
-                // If p1 is a function
-                return `export default defineConfig((${p1}) => ({\n  base: '${basePathValue}',\n  ...${p1}\n}))`;
-              }
-            );
-          }
-          
-          // Add build optimization
-          if (!newContent.includes('build:')) {
-            newContent = newContent.replace(
-              /}\)\);$/,
-              `,\n  build: {\n    minify: true,\n    sourcemap: false,\n    cssMinify: true\n  }\n}));`
-            );
-          }
-          
-          console.log('New content:', newContent);
-          
-          // Write the file
-          fs.writeFileSync(configFile, newContent);
+          fs.writeFileSync(configFile, newConfig);
           console.log('Vite config updated successfully!');
           ENDSCRIPT
           
-          # Run the script with Node.js
           node update-config.mjs
-          
-          # Show the updated config
-          cat vite.config.ts || cat vite.config.js
-          
-      # Set up Node.js environment
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: private-repo-temp/package-lock.json
-          
-      # Build project
-      - name: Build project
-        working-directory: private-repo-temp
-        run: |
-          echo "Installing dependencies:"
           npm ci
-          
-          echo "Running build command with increased memory limit:"
-          NODE_OPTIONS=--max_old_space_size=4096 npm run build
-          
-          echo "Build complete. Checking output:"
-          ls -la dist || echo "dist directory not found!"
-          
-      # Add CNAME file for custom domain (uncomment when ready to use a custom domain)
-      # - name: Add CNAME for custom domain
-      #   working-directory: private-repo-temp/dist
-      #   run: |
-      #     echo "your-domain.com" > CNAME
-          
-      # Deploy to GitHub Pages
+          npm run build
+        
+      - name: Create 404.html
+        working-directory: private-repo-temp/dist
+        run: |
+          cat > 404.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Page Not Found</title>
+            <script>
+              sessionStorage.setItem('redirect', window.location.pathname);
+              window.location.href = '/';
+            </script>
+          </head>
+          <body>
+            <p>Redirecting...</p>
+          </body>
+          </html>
+          EOF
+        
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
