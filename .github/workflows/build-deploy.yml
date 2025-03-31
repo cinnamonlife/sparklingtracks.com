@@ -37,7 +37,7 @@ jobs:
 
       - name: Update Vite config
         run: |
-          sed -i 's/export default defineConfig(({ mode }) => ({/export default defineConfig(({ mode }) => ({\n  base: "\/sparklingtracks.com\/",/' private-repo-temp/vite.config.ts
+          sed -i 's/export default defineConfig(({ mode }) => ({/export default defineConfig(({ mode }) => ({\n  base: "\/",/' private-repo-temp/vite.config.ts
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -55,11 +55,12 @@ jobs:
         working-directory: private-repo-temp
         run: npm run build
 
-      - name: Archive dist folder
-        id: archive
+      - name: Prepare deployment structure
         run: |
-          mkdir -p artifacts
-          tar -czf artifacts/github-pages.tar.gz -C private-repo-temp/dist .
+          mkdir -p artifacts/sparklingtracks.com
+          cp -r private-repo-temp/dist/* artifacts/sparklingtracks.com/
+          cd artifacts
+          tar -czf github-pages.tar.gz *
           echo "artifact=artifacts/github-pages.tar.gz" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
