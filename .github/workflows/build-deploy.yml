@@ -1,17 +1,24 @@
 name: Build and Deploy
 
 on:
+  # Runs every hour
   schedule:
-    - cron: '0 * * * *'  # Runs every hour
-  workflow_dispatch:     # Allow manual trigger
+    - cron: "0 * * * *"
+  
+  # Allow manual trigger via UI
+  workflow_dispatch:
+  
+  # Run on pushes to the 'main' branch
   push:
-    branches: [ main ]   # Run on pushes to main branch
+    branches:
+      - main
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
       # Check out public repository
       - name: Checkout public repository
@@ -46,8 +53,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: "18"
+          cache: npm
           cache-dependency-path: private-repo-temp/package-lock.json
           
       # Build the project with enhanced diagnostics
@@ -78,7 +85,6 @@ jobs:
           else
             echo "dist directory not found. Checking for other build directories:"
             find . -maxdepth 2 -type d -name "build" -o -name "dist" -o -name "out" -o -name "public"
-          fi
           
       # Create .nojekyll file to disable Jekyll processing
       - name: Create .nojekyll file
