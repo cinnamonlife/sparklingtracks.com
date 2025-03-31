@@ -82,6 +82,12 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "github-actions@github.com"
           
+      # Add a test file to verify deployment is working
+      - name: Add test file
+        working-directory: private-repo-temp/dist
+        run: |
+          echo '<html><head><title>Test Page</title></head><body><h1>GitHub Pages Deployment Test</h1><p>If you can see this, the deployment is working!</p></body></html>' > test.html
+          
       # Deploy built files to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
