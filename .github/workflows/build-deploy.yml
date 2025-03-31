@@ -21,6 +21,13 @@ jobs:
       - name: Checkout public repository
         uses: actions/checkout@v4
 
+      - name: Debug environment
+        run: |
+          echo "GitHub workspace: $GITHUB_WORKSPACE"
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+
       - name: Set up SSH deploy key
         uses: webfactory/ssh-agent@v0.7.0
         with:
@@ -34,10 +41,18 @@ jobs:
       - name: Clone private repository
         run: |
           git clone git@github.com:${{ secrets.PRIVATE_REPO_NAME }}.git private-repo-temp
+          echo "Private repo contents:"
+          ls -la private-repo-temp
 
-      - name: Update Vite config
+      - name: Check package.json and dependencies
+        working-directory: private-repo-temp
         run: |
-          sed -i 's/export default defineConfig(({ mode }) => ({/export default defineConfig(({ mode }) => ({\n  base: "\/",/' private-repo-temp/vite.config.ts
+          echo "Package.json contents:"
+          cat package.json
+          echo "\nNode version:"
+          node --version
+          echo "NPM version:"
+          npm --version
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -48,25 +63,38 @@ jobs:
 
       - name: Install dependencies
         working-directory: private-repo-temp
-        run: npm ci
+        run: |
+          npm ci
+          echo "Node modules installed:"
+          ls -la node_modules | head -n 10
 
       - name: Build
         id: build-status
         working-directory: private-repo-temp
-        run: npm run build
-
-      - name: Fix asset paths
-        working-directory: private-repo-temp
         run: |
-          find dist -type f -name "*.html" -exec sed -i 's/src="\/assets\//src="\/sparklingtracks.com\/assets\//g' {} +
-          find dist -type f -name "*.html" -exec sed -i 's/href="\/assets\//href="\/sparklingtracks.com\/assets\//g' {} +
+          echo "Starting build..."
+          npm run build
+          echo "Build complete. Exit code: $?"
 
-      - name: Archive dist folder
+      - name: Prepare deployment structure
+        run: |
+          echo "Creating deployment structure..."
+          mkdir -p artifacts/sparklingtracks.com
+          cp -r private-repo-temp/dist/* artifacts/sparklingtracks.com/
+          echo "Deployment structure:"
+          ls -la artifacts/sparklingtracks.com/
+          echo "\nIndex.html content:"
+          cat artifacts/sparklingtracks.com/index.html
+
+      - name: Archive deployment folder
         id: archive
         run: |
-          mkdir -p artifacts
-          tar -czf artifacts/github-pages.tar.gz -C private-repo-temp/dist .
+          echo "Archiving deployment folder..."
+          cd artifacts
+          tar -czf github-pages.tar.gz *
           echo "artifact=artifacts/github-pages.tar.gz" >> $GITHUB_OUTPUT
+          echo "Archive contents:"
+          tar -tvf github-pages.tar.gz | head -n 10
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -105,8 +133,21 @@ jobs:
 
       - name: Extract artifact
         run: |
+          echo "Creating dist directory..."
           mkdir dist
+          echo "Extracting archive..."
           tar -xzf github-pages.tar.gz -C dist
+          echo "Extracted contents:"
+          ls -la dist/
+
+      - name: Debug deployed content
+        run: |
+          echo "Deployed folder structure:"
+          ls -la dist/
+          echo "\nSparklingtracks.com folder contents:"
+          ls -la dist/sparklingtracks.com/
+          echo "\nDeployed index.html content:"
+          cat dist/sparklingtracks.com/index.html
 
       - name: Configure Git
         run: |
@@ -119,4 +160,16 @@ jobs:
           folder: dist
           token: ${{ secrets.DEPLOYMENT_TOKEN }}
           branch: gh-pages
-          clean: true 
+          clean: true
+
+      - name: Verify deployment
+        run: |
+          echo "Checking gh-pages branch..."
+          git fetch origin gh-pages
+          git checkout gh-pages
+          echo "Deployed files:"
+          ls -la
+          echo "\nSparklingtracks.com folder contents:"
+          ls -la sparklingtracks.com/
+          echo "\nDeployed index.html:"
+          cat sparklingtracks.com/index.html 
