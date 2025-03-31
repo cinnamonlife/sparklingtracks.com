@@ -157,7 +157,7 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: dist
+          folder: dist/sparklingtracks.com # Ensure this matches your output directory
           token: ${{ secrets.DEPLOYMENT_TOKEN }}
           branch: gh-pages
           clean: false
@@ -175,4 +175,4 @@ jobs:
           echo "\nSparklingtracks.com folder contents:"
           ls -la sparklingtracks.com/
           echo "\nDeployed index.html:"
-          cat sparklingtracks.com/index.html 
+          cat sparklingtracks.com/index.html
