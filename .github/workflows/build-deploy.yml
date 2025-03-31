@@ -36,12 +36,12 @@ jobs:
         run: |
           git clone git@github.com:${{ secrets.PRIVATE_REPO_NAME }}.git private-repo-temp
 
-      # Debug: Verify structure
+      # Verify structure
       - name: Verify repository structure
         run: |
-          echo "Public Repo Structure:"
+          echo "Public Repo:"
           ls -la
-          echo "Private Repo Structure:"
+          echo "Private Repo:"
           ls -la private-repo-temp
 
       # Setup Node.js
@@ -52,23 +52,32 @@ jobs:
           cache: npm
           cache-dependency-path: private-repo-temp/package-lock.json
 
-      # Install & Build Project
+      # Inject base path in vite.config.ts
+      - name: Patch Vite base path
+        working-directory: private-repo-temp
+        run: |
+          echo "🔧 Injecting base path..."
+          sed -i "/defineConfig({/a \ \ base: '/sparklingtracks.com/'," vite.config.ts
+          echo "✅ vite.config.ts after patch:"
+          cat vite.config.ts
+
+      # Install & Build
       - name: Install & Build
         working-directory: private-repo-temp
         run: |
-          echo "Installing dependencies..."
+          echo "📦 Installing dependencies"
           npm ci
-          echo "Building project..."
+          echo "🔨 Building project"
           NODE_OPTIONS=--max_old_space_size=4096 npm run build
-          echo "Build output:"
+          echo "✅ Build output:"
           ls -la dist || echo "⚠️ dist folder not found!"
 
-      # Optional: Add .nojekyll file (safe)
+      # Optional: Disable Jekyll
       - name: Disable Jekyll
         run: |
           touch private-repo-temp/dist/.nojekyll
 
-      # Git configuration
+      # Configure Git
       - name: Configure Git
         run: |
           git config --global user.name "GitHub Actions"
