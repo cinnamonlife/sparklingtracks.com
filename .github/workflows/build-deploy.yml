@@ -46,70 +46,85 @@ jobs:
       # Modify Vite configuration to use the correct base path
       - name: Update Vite configuration for GitHub Pages
         run: |
-          echo "Modifying Vite configuration for GitHub Pages deployment..."
+          cd private-repo-temp
           
-          # Find vite.config.js or vite.config.ts
-          VITE_CONFIG=""
-          if [ -f "private-repo-temp/vite.config.ts" ]; then
-            VITE_CONFIG="private-repo-temp/vite.config.ts"
-          elif [ -f "private-repo-temp/vite.config.js" ]; then
-            VITE_CONFIG="private-repo-temp/vite.config.js"
-          else
-            echo "Could not find Vite configuration file. Searching for it..."
-            VITE_CONFIG=$(find private-repo-temp -name "vite.config.*" | head -n 1)
-          fi
+          # Create a simple script to modify the vite config
+          cat > update-config.js << 'ENDSCRIPT'
+          const fs = require('fs');
+          const path = require('path');
           
-          echo "Found Vite config at: $VITE_CONFIG"
-          echo "Original Vite configuration:"
-          cat "$VITE_CONFIG"
+          // Find the Vite config file
+          let configFile = '';
+          if (fs.existsSync('vite.config.ts')) {
+            configFile = 'vite.config.ts';
+          } else if (fs.existsSync('vite.config.js')) {
+            configFile = 'vite.config.js';
+          } else {
+            console.error('Could not find vite config file');
+            process.exit(1);
+          }
           
-          # Create a backup of the original file
-          cp "$VITE_CONFIG" "${VITE_CONFIG}.bak"
+          console.log(`Found Vite config at: ${configFile}`);
           
-          # Instead of trying to modify the existing file with sed, let's create a new file
-          # This ensures proper syntax based on the current structure
-          echo "Creating a modified configuration file..."
+          // Read the file
+          const content = fs.readFileSync(configFile, 'utf8');
+          console.log('Original content:', content);
           
-          # Extract the content of the original file
-          ORIGINAL_CONTENT=$(cat "$VITE_CONFIG")
+          // Create the new content with base path
+          const basePathValue = '/sparklingtracks.com/';
           
-          # Create a new temporary file
-          cat > "${VITE_CONFIG}.new" << EOF
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
-import path from "path";
-import { componentTagger } from "lovable-tagger";
-
-// https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
-  base: '${{ env.SITE_PATH_PREFIX }}/',
-  server: {
-    host: "::",
-    port: 8080,
-  },
-  plugins: [
-    react(),
-    mode === 'development' &&
-    componentTagger(),
-  ].filter(Boolean),
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
-  },
-  build: {
-    minify: true,
-    sourcemap: false,
-    cssMinify: true
-  }
-}));
-EOF
+          // Simplified approach: detect the arrow function pattern and insert our base property
+          let newContent;
+          if (content.includes('defineConfig(({')) {
+            // Format: export default defineConfig(({ mode }) => ({
+            newContent = content.replace(
+              /defineConfig\(\(\{ ?(.*?) ?\}\) => \(\{/,
+              `defineConfig(({ $1 }) => ({\n  base: '${basePathValue}',`
+            );
+          } else if (content.includes('defineConfig({')) {
+            // Format: export default defineConfig({
+            newContent = content.replace(
+              /defineConfig\(\{/,
+              `defineConfig({\n  base: '${basePathValue}',`
+            );
+          } else {
+            // Unknown format, add a base property to the start of the config object
+            newContent = content.replace(
+              /export default defineConfig\((.*?)\)/s,
+              (match, p1) => {
+                // If p1 is an object literal
+                if (p1.trim().startsWith('{')) {
+                  return `export default defineConfig({\n  base: '${basePathValue}',${p1.substring(1)}`;
+                }
+                // If p1 is a function
+                return `export default defineConfig((${p1}) => ({\n  base: '${basePathValue}',\n  ...${p1}\n}))`;
+              }
+            );
+          }
           
-          # Replace the original file with our new file
-          mv "${VITE_CONFIG}.new" "$VITE_CONFIG"
+          // Add build optimization
+          if (!newContent.includes('build:')) {
+            newContent = newContent.replace(
+              /}\)\);$/,
+              `,\n  build: {\n    minify: true,\n    sourcemap: false,\n    cssMinify: true\n  }\n}));`
+            );
+          }
           
-          echo "Updated Vite configuration:"
-          cat "$VITE_CONFIG"
+          console.log('New content:', newContent);
+          
+          // Write the file
+          fs.writeFileSync(configFile, newContent);
+          console.log('Vite config updated successfully!');
+          ENDSCRIPT
+          
+          # Make the script executable
+          chmod +x update-config.js
+          
+          # Run the script
+          node update-config.js
+          
+          # Show the updated config
+          cat vite.config.ts || cat vite.config.js
           
       # Set up Node.js environment
       - name: Setup Node.js
