@@ -69,6 +69,43 @@ jobs:
             find . -maxdepth 2 -type d -name "build" -o -name "dist" -o -name "out" -o -name "public"
           fi
           
+      # Post-build: Fix asset paths for GitHub Pages
+      - name: Fix asset paths for GitHub Pages
+        working-directory: private-repo-temp
+        run: |
+          echo "Fixing asset paths in HTML files..."
+          
+          # Find the build directory
+          BUILD_DIR="dist"
+          if [ ! -d "$BUILD_DIR" ]; then
+            echo "Looking for alternative build directories..."
+            for dir in build out public; do
+              if [ -d "$dir" ]; then
+                BUILD_DIR="$dir"
+                echo "Found build directory: $BUILD_DIR"
+                break
+              fi
+            done
+          fi
+          
+          # Fix paths in HTML files
+          find $BUILD_DIR -name "*.html" -type f -exec sed -i 's/src="\//src="\/sennerei-ettensberg.de\//g' {} \;
+          find $BUILD_DIR -name "*.html" -type f -exec sed -i 's/href="\//href="\/sennerei-ettensberg.de\//g' {} \;
+          
+          # Fix paths in CSS files
+          find $BUILD_DIR -name "*.css" -type f -exec sed -i 's/url(\//url(\/sennerei-ettensberg.de\//g' {} \;
+          
+          # Fix paths in JS files - more complex, so we're careful
+          find $BUILD_DIR -name "*.js" -type f -exec sed -i 's/"\//\"\/sennerei-ettensberg.de\//g' {} \;
+          
+          echo "Path fixing completed!"
+          
+      # Add a test file to verify deployment is working
+      - name: Add test file
+        working-directory: private-repo-temp/dist
+        run: |
+          echo '<html><head><title>Test Page</title></head><body><h1>GitHub Pages Deployment Test</h1><p>If you can see this, the deployment is working!</p></body></html>' > test.html
+          
       # Debug: Check Git version and ensure Git is installed
       - name: Debug Git
         run: |
@@ -82,17 +119,11 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "github-actions@github.com"
           
-      # Add a test file to verify deployment is working
-      - name: Add test file
-        working-directory: private-repo-temp/dist
-        run: |
-          echo '<html><head><title>Test Page</title></head><body><h1>GitHub Pages Deployment Test</h1><p>If you can see this, the deployment is working!</p></body></html>' > test.html
-          
       # Deploy built files to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: private-repo-temp/dist  # Adjust if your build output is in a different directory
-          token: ${{ secrets.DEPLOYMENT_TOKEN }}  # Use the personal access token
+          token: ${{ secrets.DEPLOYMENT_TOKEN }}  # Use a personal access token instead
           branch: gh-pages  # Deploys to gh-pages branch
           clean: true       # Removes any files in the branch not in the build output
