@@ -49,9 +49,9 @@ jobs:
           cd private-repo-temp
           
           # Create a simple script to modify the vite config
-          cat > update-config.js << 'ENDSCRIPT'
-          const fs = require('fs');
-          const path = require('path');
+          cat > update-config.mjs << 'ENDSCRIPT'
+          import fs from 'fs';
+          import path from 'path';
           
           // Find the Vite config file
           let configFile = '';
@@ -117,11 +117,8 @@ jobs:
           console.log('Vite config updated successfully!');
           ENDSCRIPT
           
-          # Make the script executable
-          chmod +x update-config.js
-          
-          # Run the script
-          node update-config.js
+          # Run the script with Node.js
+          node update-config.mjs
           
           # Show the updated config
           cat vite.config.ts || cat vite.config.js
