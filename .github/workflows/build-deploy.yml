@@ -8,19 +8,20 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
     outputs:
       build-status: ${{ steps.build-status.outcome }}
-      artifact-path: ${{ steps.archive.outputs.artifact }}
 
     steps:
       - name: Checkout public repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up SSH deploy key
         uses: webfactory/ssh-agent@v0.7.0
@@ -37,33 +38,28 @@ jobs:
           git clone git@github.com:${{ secrets.PRIVATE_REPO_NAME }}.git private-repo-temp
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: "18"
-          cache: npm
+          node-version: '18'
+          cache: 'npm'
           cache-dependency-path: private-repo-temp/package-lock.json
 
       - name: Install dependencies
         working-directory: private-repo-temp
         run: npm ci
 
-      - name: Build project
+      - name: Build
         id: build-status
         working-directory: private-repo-temp
         run: npm run build
 
-      - name: Archive dist folder
-        id: archive
-        run: |
-          mkdir -p artifacts
-          tar -czf artifacts/github-pages.tar.gz -C private-repo-temp/dist .
-          echo "artifact=artifacts/github-pages.tar.gz" >> $GITHUB_OUTPUT
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: github-pages
-          path: artifacts/github-pages.tar.gz
+          path: private-repo-temp/dist
 
   report-build-status:
     runs-on: ubuntu-latest
@@ -79,30 +75,13 @@ jobs:
           fi
 
   deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
     if: ${{ needs.build.outputs.build-status == 'success' }}
-
     steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: github-pages
-
-      - name: Extract artifact
-        run: |
-          mkdir dist
-          tar -xzf github-pages.tar.gz -C dist
-
-      - name: Configure Git
-        run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "github-actions@github.com"
-
       - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          folder: dist
-          token: ${{ secrets.DEPLOYMENT_TOKEN }}
-          branch: gh-pages
-          clean: true
+        id: deployment
+        uses: actions/deploy-pages@v4 
