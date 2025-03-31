@@ -1,11 +1,11 @@
-name: Build and Deploy to GitHub Pages
+name: Build and Deploy
 
 on:
   schedule:
     - cron: '0 * * * *'  # Runs every hour
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:     # Allow manual trigger
   push:
-    branches: [ main ]  # Run on pushes to main branch
+    branches: [ main ]   # Run on pushes to main branch
 
 jobs:
   build-and-deploy:
@@ -13,108 +13,106 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Check out public repository
       - name: Checkout public repository
         uses: actions/checkout@v3
         
+      # Set up SSH for deploy key
       - name: Set up SSH deploy key
         uses: webfactory/ssh-agent@v0.7.0
         with:
           ssh-private-key: ${{ secrets.PRIVATE_REPO_DEPLOY_KEY }}
-        
+          
+      # Add GitHub to known hosts
       - name: Add GitHub to known hosts
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan github.com >> ~/.ssh/known_hosts
-        
+          
+      # Clone private repository to a temporary directory
       - name: Clone private repository
         run: |
           git clone git@github.com:${{ secrets.PRIVATE_REPO_NAME }}.git private-repo-temp
-        
-      - name: Create .nojekyll file
-        run: touch private-repo-temp/.nojekyll
-        
+          
+      # Debug: Check the repository structure
+      - name: Debug repository structure
+        run: |
+          echo "Public repository:"
+          ls -la
+          echo "Private repository:"
+          ls -la private-repo-temp
+          
+      # Set up Node.js environment
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
           cache: 'npm'
           cache-dependency-path: private-repo-temp/package-lock.json
-        
+          
+      # Build the project with enhanced diagnostics
       - name: Build project
         working-directory: private-repo-temp
         run: |
-          cat > update-config.mjs << 'ENDSCRIPT'
-          import fs from 'fs';
-          import path from 'path';
-
-          let configFile = '';
-          if (fs.existsSync('vite.config.ts')) {
-            configFile = 'vite.config.ts';
-          } else if (fs.existsSync('vite.config.js')) {
-            configFile = 'vite.config.js';
-          } else {
-            console.error('Could not find vite config file');
-            process.exit(1);
-          }
+          echo "Environment info:"
+          node -v
+          npm -v
           
-          console.log(`Found Vite config at: ${configFile}`);
-          
-          const newConfig = `
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react-swc';
-import { componentTagger } from 'lovable-tagger';
-
-export default defineConfig(({ mode }) => ({
-  base: '/',
-  server: {
-    host: '::',
-    port: 8080,
-  },
-  plugins: [
-    react(),
-    mode === 'development' && componentTagger(),
-  ].filter(Boolean),
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
-  build: {
-    minify: true,
-    sourcemap: false,
-    cssMinify: true,
-  },
-}));`;
-          
-          fs.writeFileSync(configFile, newConfig);
-          console.log('Vite config updated successfully!');
-          ENDSCRIPT
-          
-          node update-config.mjs
+          echo "Installing dependencies:"
           npm ci
-          npm run build
-        
-      - name: Create 404.html
-        working-directory: private-repo-temp/dist
+          
+          echo "Running build command with increased memory limit:"
+          NODE_OPTIONS=--max_old_space_size=4096 npm run build
+          
+          echo "Checking build output:"
+          ls -la
+          if [ -d "dist" ]; then
+            echo "dist directory found! Contents:"
+            ls -la dist
+            
+            if [ -f "dist/index.html" ]; then
+              echo "index.html found in dist directory!"
+            else
+              echo "WARNING: index.html not found in dist directory!"
+            fi
+          else
+            echo "dist directory not found. Checking for other build directories:"
+            find . -maxdepth 2 -type d -name "build" -o -name "dist" -o -name "out" -o -name "public"
+          fi
+          
+      # Create .nojekyll file to disable Jekyll processing
+      - name: Create .nojekyll file
         run: |
-          cat > 404.html << 'EOF'
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Page Not Found</title>
-            <script>
-              sessionStorage.setItem('redirect', window.location.pathname);
-              window.location.href = '/';
-            </script>
-          </head>
-          <body>
-            <p>Redirecting...</p>
-          </body>
-          </html>
-          EOF
-        
+          touch private-repo-temp/dist/.nojekyll
+          
+      # Create a fallback 404.html file for SPA routing
+      - name: Create 404.html for SPA routing
+        run: |
+          cat > private-repo-temp/dist/404.html << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Page Not Found</title>
+  <script>
+    // Single Page App routing - redirect to index.html
+    sessionStorage.setItem('redirectPath', window.location.pathname);
+    window.location.replace('/');
+  </script>
+</head>
+<body>
+  <p>Redirecting...</p>
+</body>
+</html>
+EOF
+
+      # Configure Git
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "github-actions@github.com"
+          
+      # Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
