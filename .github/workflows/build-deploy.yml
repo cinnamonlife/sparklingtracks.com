@@ -61,7 +61,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: private-repo-temp/package-lock.json
 
-      # Update the Vite configuration for GitHub Pages
+      # Update the Vite configuration for GitHub Pages using sed
       - name: Update Vite configuration
         working-directory: private-repo-temp
         run: |
@@ -79,40 +79,23 @@ jobs:
           echo "Original Vite config:"
           cat "$VITE_CONFIG"
           
-          # Create a modified version of the config with proper base path
-          cat > vite.config.modified.ts << 'EOF'
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
-import path from "path";
-import { componentTagger } from "lovable-tagger";
-
-// https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
-  base: './',  // Use relative paths for GitHub Pages
-  server: {
-    host: "::",
-    port: 8080,
-  },
-  plugins: [
-    react(),
-    mode === 'development' &&
-    componentTagger(),
-  ].filter(Boolean),
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
-  },
-  build: {
-    minify: true,
-    sourcemap: false,
-    cssMinify: true
-  }
-}));
-EOF
+          # Create a backup
+          cp "$VITE_CONFIG" "${VITE_CONFIG}.bak"
           
-          # Replace the original file
-          mv vite.config.modified.ts "$VITE_CONFIG"
+          # Use sed to add the base property
+          if grep -q "base:" "$VITE_CONFIG"; then
+            # If base property already exists, update it
+            sed -i 's/base:.*,/base: ".\/",/' "$VITE_CONFIG"
+          else
+            # Add base property after the opening parenthesis of the configuration object
+            sed -i 's/({/({ base: ".\\/",/' "$VITE_CONFIG"
+          fi
+          
+          # Add build optimizations if they don't exist
+          if ! grep -q "build:" "$VITE_CONFIG"; then
+            # Add build property before the closing parenthesis
+            sed -i 's/});$/  build: {\n    minify: true,\n    sourcemap: false,\n    cssMinify: true\n  }\n});/' "$VITE_CONFIG"
+          fi
           
           echo "Updated Vite config:"
           cat "$VITE_CONFIG"
@@ -155,7 +138,7 @@ EOF
         run: |
           echo "Archiving deployment folder..."
           cd artifacts
-          tar -czf github-pages.tar.gz sparklingtracks.com .nojekyll
+          tar -czf github-pages.tar.gz .
           echo "artifact=artifacts/github-pages.tar.gz" >> $GITHUB_OUTPUT
           echo "Archive contents:"
           tar -tvf github-pages.tar.gz | head -n 10
