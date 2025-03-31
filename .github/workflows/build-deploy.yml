@@ -37,7 +37,7 @@ jobs:
 
       - name: Update Vite config
         run: |
-          sed -i 's/export default defineConfig(({ mode }) => ({/export default defineConfig(({ mode }) => ({\n  base: "\/sparklingtracks.com\/",/' private-repo-temp/vite.config.ts
+          sed -i 's/export default defineConfig(({ mode }) => ({/export default defineConfig(({ mode }) => ({\n  base: "\/",/' private-repo-temp/vite.config.ts
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -54,6 +54,12 @@ jobs:
         id: build-status
         working-directory: private-repo-temp
         run: npm run build
+
+      - name: Fix asset paths
+        working-directory: private-repo-temp
+        run: |
+          find dist -type f -name "*.html" -exec sed -i 's/src="\/assets\//src="\/sparklingtracks.com\/assets\//g' {} +
+          find dist -type f -name "*.html" -exec sed -i 's/href="\/assets\//href="\/sparklingtracks.com\/assets\//g' {} +
 
       - name: Archive dist folder
         id: archive
