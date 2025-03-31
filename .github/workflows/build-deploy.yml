@@ -21,13 +21,6 @@ jobs:
       - name: Checkout public repository
         uses: actions/checkout@v4
 
-      - name: Debug environment
-        run: |
-          echo "GitHub workspace: $GITHUB_WORKSPACE"
-          echo "Current directory: $(pwd)"
-          echo "Directory contents:"
-          ls -la
-
       - name: Set up SSH deploy key
         uses: webfactory/ssh-agent@v0.7.0
         with:
@@ -43,16 +36,6 @@ jobs:
           git clone git@github.com:${{ secrets.PRIVATE_REPO_NAME }}.git private-repo-temp
           echo "Private repo contents:"
           ls -la private-repo-temp
-
-      - name: Check package.json and dependencies
-        working-directory: private-repo-temp
-        run: |
-          echo "Package.json contents:"
-          cat package.json
-          echo "Node version:"
-          node --version
-          echo "NPM version:"
-          npm --version
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -118,39 +101,22 @@ jobs:
           npm run build
           echo "Build complete. Exit code: $?"
 
-      - name: Add .nojekyll file
+      - name: Prepare deploy directory
         run: |
-          touch private-repo-temp/dist/.nojekyll
-          echo "Created .nojekyll file"
-
-      - name: Prepare deployment structure
-        run: |
-          echo "Creating deployment structure..."
-          mkdir -p artifacts/sparklingtracks.com
-          cp -r private-repo-temp/dist/* artifacts/sparklingtracks.com/
-          touch artifacts/.nojekyll
-          echo "Deployment structure:"
-          ls -la artifacts/
-          echo "Sparklingtracks.com folder contents:"
-          ls -la artifacts/sparklingtracks.com/
-          echo "Index.html content:"
-          cat artifacts/sparklingtracks.com/index.html
-
-      - name: Archive deployment folder
-        id: archive
-        run: |
-          echo "Archiving deployment folder..."
-          cd artifacts
-          tar -czf github-pages.tar.gz .
-          echo "artifact=artifacts/github-pages.tar.gz" >> $GITHUB_OUTPUT
-          echo "Archive contents:"
-          tar -tvf github-pages.tar.gz | head -n 10
+          echo "Preparing deployment directory..."
+          mkdir -p gh-pages/sparklingtracks.com
+          cp -r private-repo-temp/dist/* gh-pages/sparklingtracks.com/
+          touch gh-pages/.nojekyll
+          echo "Deployment directory structure:"
+          ls -la gh-pages/
+          echo "sparklingtracks.com folder contents:"
+          ls -la gh-pages/sparklingtracks.com/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: github-pages
-          path: artifacts/github-pages.tar.gz
+          path: gh-pages/
 
   report-build-status:
     runs-on: ubuntu-latest
@@ -180,21 +146,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: github-pages
-
-      - name: Extract artifact
-        run: |
-          echo "Creating dist directory..."
-          mkdir -p dist
-          echo "Extracting archive..."
-          tar -xzf github-pages.tar.gz -C dist
-          echo "Extracted contents:"
-          ls -la dist/
+          path: dist
 
       - name: Debug deployed content
         run: |
           echo "Deployed folder structure:"
           ls -la dist/
-          echo "Sparklingtracks.com folder contents:"
+          echo "sparklingtracks.com folder contents:"
           ls -la dist/sparklingtracks.com/
           echo "Deployed index.html content:"
           cat dist/sparklingtracks.com/index.html
@@ -219,7 +177,7 @@ jobs:
           git checkout gh-pages
           echo "Deployed files:"
           ls -la
-          echo "Sparklingtracks.com folder contents:"
+          echo "sparklingtracks.com folder contents:"
           ls -la sparklingtracks.com/
           echo "Deployed index.html:"
           cat sparklingtracks.com/index.html
