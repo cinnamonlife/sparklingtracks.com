@@ -15,90 +15,65 @@ jobs:
       contents: write
 
     steps:
-      # Checkout public repository
       - name: Checkout public repository
         uses: actions/checkout@v3
 
-      # Set up SSH for deploy key
       - name: Set up SSH deploy key
         uses: webfactory/ssh-agent@v0.7.0
         with:
           ssh-private-key: ${{ secrets.PRIVATE_REPO_DEPLOY_KEY }}
 
-      # Add GitHub to known hosts
       - name: Add GitHub to known hosts
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan github.com >> ~/.ssh/known_hosts
 
-      # Clone private repository to a temporary directory
       - name: Clone private repository
         run: |
           git clone git@github.com:${{ secrets.PRIVATE_REPO_NAME }}.git private-repo-temp
 
-      # Set up Node.js environment
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: "18"
-          cache: "npm"
+          cache: npm
           cache-dependency-path: private-repo-temp/package-lock.json
 
-      # Inject base path into vite.config.ts
-      - name: Inject base path into Vite config
+      - name: Inject Vite Configuration with Path Aliases
         working-directory: private-repo-temp
         run: |
-          echo "import { defineConfig } from 'vite';" > vite.config.ts
-          echo "export default defineConfig({ base: '/sparklingtracks.com/' });" >> vite.config.ts
-          echo "✅ vite.config.ts after injection:"
+          cat <<EOT >> vite.config.ts
+          import { defineConfig } from 'vite';
+          import react from '@vitejs/plugin-react-swc';
+          import path from 'path';
+          import { componentTagger } from 'lovable-tagger';
+
+          export default defineConfig(({ mode }) => ({
+            server: {
+              host: "::",
+              port: 8080,
+            },
+            plugins: [
+              react(),
+              mode === 'development' && componentTagger(),
+            ].filter(Boolean),
+            resolve: {
+              alias: {
+                "@": path.resolve(__dirname, "./src"),
+              },
+            },
+          }));
+          EOT
           cat vite.config.ts
 
-      # Install dependencies
       - name: Install dependencies
         working-directory: private-repo-temp
         run: npm ci
 
-      # Build the project
       - name: Build project
         working-directory: private-repo-temp
-        run: |
-          NODE_OPTIONS=--max_old_space_size=4096 npm run build
-          echo "✅ Build output:"
-          ls -la dist || echo "⚠️ dist folder not found!"
+        run: npm run build
 
-      # Create .nojekyll file to disable Jekyll processing
-      - name: Create .nojekyll file
-        run: touch private-repo-temp/dist/.nojekyll
-
-      # Upload build artifacts
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts
-          path: private-repo-temp/dist
-          retention-days: 5
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    permissions:
-      contents: write
-
-    steps:
-      # Download build artifacts
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts
-          path: private-repo-temp/dist
-
-      # Configure Git
-      - name: Configure Git
-        run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "github-actions@github.com"
-
-      # Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
