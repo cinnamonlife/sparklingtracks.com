@@ -57,44 +57,56 @@ jobs:
           else
             echo "Could not find Vite configuration file. Searching for it..."
             VITE_CONFIG=$(find private-repo-temp -name "vite.config.*" | head -n 1)
-            
-            if [ -z "$VITE_CONFIG" ]; then
-              echo "No Vite configuration file found. Creating one..."
-              echo "import { defineConfig } from 'vite';" > private-repo-temp/vite.config.js
-              echo "export default defineConfig({" >> private-repo-temp/vite.config.js
-              echo "  // Original config" >> private-repo-temp/vite.config.js
-              echo "});" >> private-repo-temp/vite.config.js
-              VITE_CONFIG="private-repo-temp/vite.config.js"
-            fi
           fi
           
           echo "Found Vite config at: $VITE_CONFIG"
+          echo "Original Vite configuration:"
+          cat "$VITE_CONFIG"
           
-          # Check if config is using defineConfig
-          if grep -q "defineConfig" "$VITE_CONFIG"; then
-            # Update the defineConfig to include the base path
-            if grep -q "base:" "$VITE_CONFIG"; then
-              # If base is already defined, update it
-              sed -i "s|base: ['\"].*['\"]|base: '${{ env.SITE_PATH_PREFIX }}'|g" "$VITE_CONFIG"
-            else
-              # If base is not defined, add it before the first closing parenthesis or brace
-              if grep -q "export default defineConfig({" "$VITE_CONFIG"; then
-                # Format for object literal in defineConfig
-                sed -i "s|export default defineConfig({|export default defineConfig({\n  base: '${{ env.SITE_PATH_PREFIX }}',|" "$VITE_CONFIG"
-              else
-                # Format for function in defineConfig
-                sed -i "s|export default defineConfig(|export default defineConfig({\n  base: '${{ env.SITE_PATH_PREFIX }}',\n  ....|" "$VITE_CONFIG"
-                sed -i "s|  ....|)|" "$VITE_CONFIG"
-              fi
-            fi
-          else
-            # Simpler format without defineConfig
-            if grep -q "base:" "$VITE_CONFIG"; then
-              sed -i "s|base: ['\"].*['\"]|base: '${{ env.SITE_PATH_PREFIX }}'|g" "$VITE_CONFIG"
-            else
-              sed -i "s|export default {|export default {\n  base: '${{ env.SITE_PATH_PREFIX }}',|" "$VITE_CONFIG"
-            fi
-          fi
+          # Create a backup of the original file
+          cp "$VITE_CONFIG" "${VITE_CONFIG}.bak"
+          
+          # Instead of trying to modify the existing file with sed, let's create a new file
+          # This ensures proper syntax based on the current structure
+          echo "Creating a modified configuration file..."
+          
+          # Extract the content of the original file
+          ORIGINAL_CONTENT=$(cat "$VITE_CONFIG")
+          
+          # Create a new temporary file
+          cat > "${VITE_CONFIG}.new" << EOF
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react-swc";
+import path from "path";
+import { componentTagger } from "lovable-tagger";
+
+// https://vitejs.dev/config/
+export default defineConfig(({ mode }) => ({
+  base: '${{ env.SITE_PATH_PREFIX }}/',
+  server: {
+    host: "::",
+    port: 8080,
+  },
+  plugins: [
+    react(),
+    mode === 'development' &&
+    componentTagger(),
+  ].filter(Boolean),
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  build: {
+    minify: true,
+    sourcemap: false,
+    cssMinify: true
+  }
+}));
+EOF
+          
+          # Replace the original file with our new file
+          mv "${VITE_CONFIG}.new" "$VITE_CONFIG"
           
           echo "Updated Vite configuration:"
           cat "$VITE_CONFIG"
